@@ -1,24 +1,29 @@
+# ===== 禁止源码入库 =====
+patches/
+*.go
+*.ts
+*.vue
+claude.md
+Dockerfile
+one-click-deploy.sh
+one-click-docker.sh
+one-click-start.sh
+dev.sh
+server-start.sh
+start-mac.sh
+deploy.sh
+
 # macOS
 .DS_Store
 ._*
 
-# 初始化标记（本地状态，不入库）
+# 本地状态
 .mongo_initialized
 .influx_initialized
-
-# Windows 编译产物
-*.exe
-
-# 注意: ymlink-server (Linux二进制) 故意提交到仓库，供新服务器直接拉取运行
-
-# 本地overlay（每台机器路径不同，部署时自动生成）
-patches/overlay.json
-
-# 本地环境配置
-.env
-
-# 备份目录
 .backup_web/
+
+# 本地环境
+.env
 
 # Node
 node_modules/
@@ -27,4 +32,3 @@ node_modules/
 .idea/
 .vscode/
 *.swp
-*.swo
