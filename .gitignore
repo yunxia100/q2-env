@@ -1,20 +1,12 @@
-# only binary files in this repo
+# no scripts, no source code
 *.sh
 *.go
 *.ts
 *.vue
 *.md
-*.yml
-*.yaml
-*.json
-*.js
-*.env*
-*.conf
-*.toml
 Dockerfile
 patches/
 drive-server/
-mongo-init/
 .DS_Store
 ._*
 .mongo_initialized
