@@ -1,9 +1,8 @@
-# ===== 禁止源码入库 =====
 patches/
 *.go
 *.ts
 *.vue
-claude.md
+*.md
 Dockerfile
 one-click-deploy.sh
 one-click-docker.sh
@@ -12,23 +11,16 @@ dev.sh
 server-start.sh
 start-mac.sh
 deploy.sh
+claude.md
+drive-server/
 
-# macOS
 .DS_Store
 ._*
-
-# 本地状态
 .mongo_initialized
 .influx_initialized
 .backup_web/
-
-# 本地环境
 .env
-
-# Node
 node_modules/
-
-# IDE
 .idea/
 .vscode/
 *.swp
