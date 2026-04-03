@@ -1,0 +1,130 @@
+version: '3.8'
+
+services:
+  # ==================== MongoDB (带认证) ====================
+  mongodb:
+    image: mongo:6.0
+    container_name: ymlink-mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d:ro
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+      MONGO_INITDB_DATABASE: ymlink_q2
+    command: ["--auth"]
+    networks:
+      - ymlink-net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ping:1})", "-u", "admin", "-p", "admin", "--authenticationDatabase", "admin"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ==================== InfluxDB ====================
+  influxdb:
+    image: influxdb:2.7
+    container_name: ymlink-influx
+    restart: always
+    ports:
+      - "8086:8086"
+    volumes:
+      - influx_data:/var/lib/influxdb2
+    environment:
+      DOCKER_INFLUXDB_INIT_MODE: setup
+      DOCKER_INFLUXDB_INIT_USERNAME: admin
+      DOCKER_INFLUXDB_INIT_PASSWORD: admin12345678
+      DOCKER_INFLUXDB_INIT_ORG: ymlink
+      DOCKER_INFLUXDB_INIT_BUCKET: realtime
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ymlink-influx-token
+      DOCKER_INFLUXDB_INIT_RETENTION: 168h
+    networks:
+      - ymlink-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ==================== YMLink Server ====================
+  ymlink-server:
+    build:
+      context: ..
+      dockerfile: ymlink-q2-env/Dockerfile
+    container_name: ymlink-server
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      influxdb:
+        condition: service_healthy
+    environment:
+      # 系统
+      SYSTEM_MODE: debug
+      SYSTEM_LOG_LEVEL: debug
+      SYSTEM_MEM_LIMIT: "0"
+      SYSTEM_CPU_LIMIT: "4"
+      SYSTEM_ROBOT_THREAD_LIMIT: "1"
+      SYSTEM_ROBOT_MESSAGE_LIMIT: "100"
+      SYSTEM_DBLOAD: "true"
+      # HTTP 服务
+      HTTP_SERVER1_URL: ":8080"
+      HTTP_SERVER1_MODE: debug
+      HTTP_SERVER1_AUTH_PASSWORD: ymlink-jwt-secret
+      HTTP_SERVER1_AUTH_TIMEOUT: "604800"
+      HTTP_SERVER1_HTML_PATH: ./html
+      # MongoDB (Docker 内部网络用服务名)
+      MONGO1_URL: "mongodb:27017/ymlink_q2?authSource=admin"
+      MONGO1_DATABASE: ymlink_q2
+      MONGO1_USERNAME: admin
+      MONGO1_PASSWORD: admin
+      # InfluxDB
+      INFLUX1_URL: http://influxdb:8086
+      INFLUX1_ORG: ymlink
+      INFLUX1_TOKEN: ymlink-influx-token
+      # FriendB
+      FRIENDB1_FILE_PATH: ./data/friendb/friends.friendb
+      FRIENDB1_TOTAL: "100000"
+      # IP2Region
+      IP2REGION1_FILE_PATH: ./data/ip2region/ip2region.xdb
+      # 驱动 (底层驱动如需运行，改为 Docker 服务名)
+      DRIVE_MAPPING: "server1#iOSQQ#8.9.80#http://8.130.31.166:8098"
+      DRIVE_TIMEOUT: "30"
+      DRIVE_MAX_CONN: "50"
+      MOBILE_PORT: "16100"
+    volumes:
+      - server_log:/app/log
+      - server_data:/app/data
+      - server_file:/app/file
+    networks:
+      - ymlink-net
+
+  # ==================== 底层驱动 (按需启用) ====================
+  # drive-server:
+  #   image: ubuntu:22.04
+  #   container_name: ymlink-drive
+  #   restart: always
+  #   ports:
+  #     - "8098:8098"
+  #   volumes:
+  #     - ./drive-server:/app
+  #   working_dir: /app
+  #   command: ["./你的驱动程序名"]
+  #   networks:
+  #     - ymlink-net
+
+volumes:
+  mongo_data:
+  influx_data:
+  server_log:
+  server_data:
+  server_file:
+
+networks:
+  ymlink-net:
+    driver: bridge
