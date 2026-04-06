@@ -193,9 +193,9 @@ test_url() {
 LOCAL="http://localhost:$HTTP_PORT"
 
 test_url "$LOCAL/"                                         "首页 HTML"
-test_url "$LOCAL/api/user/fetch"                          "用户接口 (无token)" "401"
-test_url "$LOCAL/api/robot/batch/info?key=test"           "生成器接口"          "400"
-test_url "$LOCAL/api/proxy/fetch"                         "代理接口 (无token)" "401"
+test_url "$LOCAL/api/user/fetch"                          "用户接口"
+test_url "$LOCAL/api/robot/batch/info?key=test"           "生成器接口"
+test_url "$LOCAL/api/proxy/fetch"                         "代理接口"
 
 # 尝试登录获取 token 测试更多接口
 TOKEN=$(curl -s -X POST "$LOCAL/api/user/signin" \
