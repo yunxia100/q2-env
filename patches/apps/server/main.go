@@ -637,10 +637,24 @@ func init() {
 							if bindObjid != "" && len(bindObjid) == 5 && existRobot.Kernel.Objid != bindObjid {
 								existRobot.Kernel.Objid = bindObjid
 								existRobot.Submit.Password = password
-								existRobot.Status.Login = nil           // 清除旧登录状态，让系统重新登录
 								existRobot.Cache.Offline = ""
-								existRobot.Stop = false
-								results = append(results, SubmitResult{Line: line, Uid: uid, Success: true, Objid: bindObjid, Reused: true, Msg: "已更新设备绑定"})
+								// 标记为已登录成功，复用底层驱动的活跃会话
+								loginStatus := &model.RobotStatusLogin{}
+								loginStatus.Time = time.Now().UnixMilli()
+								loginStatus.Code = define.ROBOT_LOGIN_STATUS_SUCC
+								existRobot.Status.Login = loginStatus
+								if existRobot.Status.RenewOnline == nil {
+									existRobot.Status.RenewOnline = &model.RobotStatusCurrent{}
+									existRobot.Status.RenewOnline.Time = time.Now().Unix()
+									existRobot.Status.RenewOnline.Timer = time.Now().Unix() + define.INTERVAL_RENEW_ONLINE
+								}
+								if existRobot.Status.RenewSecretKey == nil {
+									existRobot.Status.RenewSecretKey = &model.RobotStatusCurrent{}
+									existRobot.Status.RenewSecretKey.Time = time.Now().Unix()
+									existRobot.Status.RenewSecretKey.Timer = time.Now().Unix() + define.INTERVAL_RENEW_SECRET_KEY
+								}
+								existRobot.Stop = true
+								results = append(results, SubmitResult{Line: line, Uid: uid, Success: true, Objid: bindObjid, Reused: true, Msg: "已更新设备绑定（使用现有会话）"})
 							} else {
 								results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Objid: existRobot.Kernel.Objid, Msg: "账号已存在"})
 							}
@@ -685,10 +699,26 @@ func init() {
 						table_robot.Submit.Password = password
 						table_robot.Status.Register = &model.RobotStatusCurrent{}
 
-						// 如果是复用设备，设置UID但不标记为已登录
-						// 让系统后台自动对已有设备执行 pwdLogin（避免会话过期问题）
+						// 如果是复用设备，标记为已登录成功
+						// 设备在底层驱动仍有活跃会话，无需重新 pwdLogin（否则会触发滑块）
+						// 同时正确设置 RenewSecretKey / RenewOnline 定时器，让后台 handler 正常续期
 						if reused {
 							table_robot.Kernel.UserLoginData.Uin = uid
+
+							loginStatus := &model.RobotStatusLogin{}
+							loginStatus.Time = time.Now().UnixMilli()
+							loginStatus.Code = define.ROBOT_LOGIN_STATUS_SUCC
+							table_robot.Status.Login = loginStatus
+
+							table_robot.Status.RenewSecretKey = &model.RobotStatusCurrent{}
+							table_robot.Status.RenewSecretKey.Time = time.Now().Unix()
+							table_robot.Status.RenewSecretKey.Timer = time.Now().Unix() + define.INTERVAL_RENEW_SECRET_KEY
+
+							table_robot.Status.RenewOnline = &model.RobotStatusCurrent{}
+							table_robot.Status.RenewOnline.Time = time.Now().Unix()
+							table_robot.Status.RenewOnline.Timer = time.Now().Unix() + define.INTERVAL_RENEW_ONLINE
+
+							table_robot.Stop = true
 						}
 
 						// 分配代理
@@ -711,7 +741,7 @@ func init() {
 
 						msg := "提交成功"
 						if reused {
-							msg = "提交成功（复用已有设备，等待系统自动登录）"
+							msg = "提交成功（复用已有设备，使用现有会话）"
 						}
 						results = append(results, SubmitResult{Line: line, Uid: uid, Success: true, Objid: table_robot.Kernel.Objid, Reused: reused, Msg: msg})
 					}
