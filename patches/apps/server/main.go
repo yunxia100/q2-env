@@ -685,16 +685,10 @@ func init() {
 						table_robot.Submit.Password = password
 						table_robot.Status.Register = &model.RobotStatusCurrent{}
 
-						// 如果是复用设备，标记为已登录成功，跳过重复登录
+						// 如果是复用设备，设置UID但不标记为已登录
+						// 让系统后台自动对已有设备执行 pwdLogin（避免会话过期问题）
 						if reused {
 							table_robot.Kernel.UserLoginData.Uin = uid
-							loginStatus := &model.RobotStatusLogin{}
-							loginStatus.Time = time.Now().UnixMilli()
-							loginStatus.Code = define.ROBOT_LOGIN_STATUS_SUCC
-							table_robot.Status.Login = loginStatus
-							renewStatus := &model.RobotStatusCurrent{}
-							renewStatus.Time = time.Now().UnixMilli()
-							table_robot.Status.RenewOnline = renewStatus
 						}
 
 						// 分配代理
@@ -717,7 +711,7 @@ func init() {
 
 						msg := "提交成功"
 						if reused {
-							msg = "提交成功（复用已有设备，跳过登录）"
+							msg = "提交成功（复用已有设备，等待系统自动登录）"
 						}
 						results = append(results, SubmitResult{Line: line, Uid: uid, Success: true, Objid: table_robot.Kernel.Objid, Reused: reused, Msg: msg})
 					}
