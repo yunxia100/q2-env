@@ -693,13 +693,13 @@ func init() {
 						// 如果是复用设备，标记为已登录成功，跳过重复登录
 						if reused {
 							table_robot.Kernel.UserLoginData.Uin = uid
-							table_robot.Status.Login = &model.RobotStatusLogin{
-								Time: time.Now().UnixMilli(),
-								Code: define.ROBOT_LOGIN_STATUS_SUCC,
-							}
-							table_robot.Status.RenewOnline = &model.RobotStatusCurrent{
-								Time: time.Now().UnixMilli(),
-							}
+							loginStatus := &model.RobotStatusLogin{}
+							loginStatus.Time = time.Now().UnixMilli()
+							loginStatus.Code = define.ROBOT_LOGIN_STATUS_SUCC
+							table_robot.Status.Login = loginStatus
+							renewStatus := &model.RobotStatusCurrent{}
+							renewStatus.Time = time.Now().UnixMilli()
+							table_robot.Status.RenewOnline = renewStatus
 						}
 
 						// 分配代理
