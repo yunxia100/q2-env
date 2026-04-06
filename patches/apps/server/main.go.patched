@@ -1,0 +1,380 @@
+package main
+
+import (
+	// "os"
+	"runtime"
+	"runtime/debug"
+	"time"
+	"ymlink-q2/apps/server/ctrler"
+	"ymlink-q2/apps/server/self"
+	"ymlink-q2/define"
+	"ymlink-q2/ini"
+	"ymlink-q2/utils"
+
+	"github.com/gin-gonic/gin"
+)
+
+func init() {
+
+	utils.SetMen(define.SYSTEM_MEM_LIMIT)
+	utils.SetCpu(define.SYSTEM_CPU_LIMIT)
+	utils.SetLog(define.SYSTEM_LOG_LEVEL)
+
+	utils.Setup(ini.MONGO1(nil))
+	utils.Setup(ini.INFLUX1(nil))
+	utils.Setup(ini.FRIENDB1(nil))
+	utils.Setup(ini.IP2REGION1(nil))
+
+	utils.Setup(self.Mobiles.Loading)
+	utils.Setup(self.Users.Loading)
+	utils.Setup(self.Custservices.Loading)
+	utils.Setup(self.Proxys.Loading)
+	utils.Setup(self.ProxyExtractors.Loading)
+	utils.Setup(self.RobotLabels.Loading)
+	utils.Setup(self.RobotBatchs.Loading)
+	utils.Setup(self.Robots.Loading)
+	utils.Setup(self.Webrobots.Loading)
+	utils.Setup(self.RobotMaterials.Loading)
+	utils.Setup(self.TaskGreetRules.Loading)
+	utils.Setup(self.TaskGreetWords.Loading)
+	utils.Setup(self.TaskQzoneRemarkRules.Loading)
+	utils.Setup(self.TaskUsedbs.Loading)
+	utils.Setup(self.TaskQzonedbs.Loading)
+	utils.Setup(self.TaskMaterialdbs.Loading)
+	utils.Setup(self.TaskRealinfodbs.Loading)
+	utils.Setup(self.Tasks.Loading)
+
+	utils.Setup(ctrler.Mobile.Start)
+	utils.Setup(ctrler.ProxyExtractor.Start)
+	utils.Setup(ctrler.RobotBatch.Start)
+	utils.Setup(ctrler.RobotFriend.Start)
+	utils.Setup(ctrler.RobotDrive.Start)
+	utils.Setup(ctrler.Robot.Start)
+	utils.Setup(ctrler.Task.Start)
+
+	utils.Setup(ini.HTTPSERVER1(func(API *gin.RouterGroup) {
+
+		API.Use(ctrler.User.Auth())
+
+		DEBUG := API.Group("/debug")
+		{
+			DEBUG.GET("/proxy", debug_proxy)
+			DEBUG.GET("/ip", debug_ip)
+			DEBUG.GET("/table_statistic", ctrler.Robot.TableStatistic)
+			DEBUG.GET("/robot_error", debug_robot_error)
+		}
+
+		Mobile := API.Group("/mobile")
+		{
+			Mobile.GET("/fetch", ctrler.Mobile.Fetch)
+			Mobile.GET("/register", ctrler.Mobile.Register)
+			Mobile.GET("/keepalive", ctrler.Mobile.Keepalive)
+		}
+
+		USER := API.Group("/user")
+		{
+			USER.POST("/create", ctrler.User.Create)
+			USER.DELETE("/delete", ctrler.User.Delete)
+			USER.POST("/update", ctrler.User.Update)
+			USER.GET("/fetch", ctrler.User.Fetch)
+			USER.GET("/status", ctrler.User.Status)
+			USER.GET("/disabled_robot", ctrler.User.DisabledRobot)
+			USER.GET("/environment", ctrler.User.Environment)
+			USER.GET("/progress", ctrler.User.Progress)
+			// not auth
+			USER.POST("/signin", ctrler.User.Singin)
+		}
+
+		CUSTSERVICE := API.Group("/custservice")
+		{
+			CUSTSERVICE.POST("/create", ctrler.Custservice.Create)
+			CUSTSERVICE.DELETE("/delete", ctrler.Custservice.Delete)
+			CUSTSERVICE.POST("/update", ctrler.Custservice.Update)
+			CUSTSERVICE.GET("/fetch", ctrler.Custservice.Fetch)
+
+			API := CUSTSERVICE.Group("/api")
+			{
+				API.Use(ctrler.Custservice.Auth())
+
+				API.GET("/message", ctrler.Custservice.Message)
+				API.GET("/read_message", ctrler.Robot.ReadMessage)
+				API.POST("/send_message", ctrler.Custservice.SendMessage)
+				API.GET("/message_history", ctrler.Custservice.MessageHistory)
+				// not auth
+				API.POST("/signin", ctrler.Custservice.Singin)
+			}
+		}
+
+		PROXY := API.Group("/proxy")
+		{
+			PROXY.POST("/create", ctrler.Proxy.Create)
+			PROXY.DELETE("/delete", ctrler.Proxy.Delete)
+			PROXY.DELETE("/recover", ctrler.Proxy.Recover)
+			PROXY.POST("/update", ctrler.Proxy.Update)
+			PROXY.GET("/fetch", ctrler.Proxy.Fetch)
+			PROXY.GET("/get_region", ctrler.Proxy.GetRegion)
+			PROXY.GET("/status", ctrler.Proxy.Status)
+
+			EXTRACTOR := PROXY.Group("/extractor")
+			{
+				EXTRACTOR.POST("/create", ctrler.ProxyExtractor.Create)
+				EXTRACTOR.GET("/fetch", ctrler.ProxyExtractor.Fetch)
+			}
+		}
+
+		WEBROBOT := API.Group("/webrobot")
+		{
+			WEBROBOT.GET("/fetch", ctrler.Webrobot.Fetch)
+			WEBROBOT.DELETE("/delete", ctrler.Webrobot.Delete)
+			// not auth
+			WEBROBOT.POST("/create", ctrler.Webrobot.Create)
+		}
+
+		ROBOT := API.Group("/robot")
+		{
+			ROBOT.GET("/test", ctrler.Robot.Test)
+			ROBOT.GET("/fetch", ctrler.Robot.Fetch)
+			ROBOT.GET("/fetch_by_filter", ctrler.Robot.FetchByFilter)
+			ROBOT.POST("/status", ctrler.Robot.Status)
+			ROBOT.GET("/copy", ctrler.Robot.Copy)
+			ROBOT.GET("/drive", ctrler.Robot.Drive)
+			ROBOT.GET("/message", ctrler.Robot.Message)
+			ROBOT.GET("/read_message", ctrler.Robot.ReadMessage)
+			ROBOT.POST("/send_message", ctrler.Robot.SendMessage)
+			ROBOT.GET("/message_history", ctrler.Robot.MessageHistory)
+			ROBOT.GET("/statistic", ctrler.Robot.Statistic)
+			ROBOT.GET("/reload_pack", ctrler.Robot.ReloadPack)
+			ROBOT.POST("/reload_status", ctrler.Robot.ReloadStatus)
+			ROBOT.POST("/update_drive", ctrler.Robot.UpdateDrive)
+			ROBOT.POST("/update_account", ctrler.Robot.UpdateAccount)
+			ROBOT.POST("/update_label", ctrler.Robot.UpdateLabel)
+			ROBOT.POST("/set_ban", ctrler.Robot.SetBan)
+			ROBOT.POST("/update_temp_batch", ctrler.Robot.UpdateTempBatch)
+			ROBOT.POST("/update_stop", ctrler.Robot.UpdateStop)
+			ROBOT.POST("/update_software_version", ctrler.Robot.UpdateSoftwareVersion)
+			ROBOT.GET("/scan_login", ctrler.Robot.ScanLogin)
+			ROBOT.POST("/update_daily", ctrler.Robot.UpdateDaily)
+			ROBOT.POST("/update_custservice", ctrler.Robot.UpdateCustservice)
+			ROBOT.GET("/work", ctrler.Robot.Work)
+			ROBOT.POST("/create_work", ctrler.Robot.CreateWork)
+			ROBOT.DELETE("/clear_work", ctrler.Robot.ClearWork)
+			ROBOT.GET("/reset_work", ctrler.Robot.ResetWork)
+			ROBOT.POST("/delete_devicelist", ctrler.Robot.DeleteDevicelist)
+			ROBOT.DELETE("/delete", ctrler.Robot.Delete)
+			ROBOT.GET("/assistant_login_scan_qrcode", ctrler.Robot.AssistantLoginScanQrcode)
+			// not auth
+			ROBOT.POST("/create", ctrler.Robot.Create)
+			ROBOT.POST("/import_pack", ctrler.Robot.ImportPack)
+			ROBOT.GET("/login", ctrler.Robot.Login)
+			ROBOT.GET("/register", ctrler.Robot.Register)
+			ROBOT.GET("/register_clear", ctrler.Robot.RegisterClear)
+			ROBOT.GET("/login_clear", ctrler.Robot.LoginClear)
+			ROBOT.GET("/delete_by_batch", ctrler.Robot.DeleteByBatch)
+			ROBOT.GET("/proxy_reset", ctrler.Robot.ProxyReset)
+			ROBOT.GET("/login_assistant_qrcode", ctrler.Robot.LoginAssistantQrcode)
+			ROBOT.GET("/set_password", ctrler.Robot.SetPassword)
+			ROBOT.GET("/friend_notices", ctrler.Robot.FriendNotices)
+			ROBOT.POST("/friend_pass", ctrler.Robot.FriendPass)
+
+			LABEL := ROBOT.Group("/label")
+			{
+				LABEL.GET("/fetch", ctrler.RobotLabel.Fetch)
+				LABEL.POST("/create", ctrler.RobotLabel.Create)
+				LABEL.POST("/update", ctrler.RobotLabel.Update)
+				LABEL.DELETE("/delete", ctrler.RobotLabel.Delete)
+			}
+
+			BATCH := ROBOT.Group("/batch")
+			{
+				BATCH.POST("/create", ctrler.RobotBatch.Create)
+				BATCH.GET("/fetch", ctrler.RobotBatch.Fetch)
+				BATCH.POST("/update_key", ctrler.RobotBatch.UpdateKey)
+				BATCH.DELETE("/delete", ctrler.RobotBatch.Delete)
+				// not auth
+				BATCH.GET("/info", ctrler.RobotBatch.Info)
+				BATCH.GET("/status", ctrler.RobotBatch.Status)
+			}
+
+			FRIEND := ROBOT.Group("/friend")
+			{
+				FRIEND.POST("/fetch", ctrler.RobotFriend.Fetch)
+				FRIEND.POST("/fetch_value", ctrler.RobotFriend.FetchValue)
+				FRIEND.GET("/export", ctrler.RobotFriend.Export)
+			}
+
+			MATERIAL := ROBOT.Group("/material")
+			{
+				MATERIAL.GET("/fetch", ctrler.RobotMaterial.Fetch)
+				MATERIAL.POST("/upload", ctrler.RobotMaterial.Upload)
+				MATERIAL.GET("/get_grouplink", ctrler.RobotMaterial.GetGroupLink)
+				MATERIAL.DELETE("/delete", ctrler.RobotMaterial.Delete)
+			}
+
+			MESSAGE := ROBOT.Group("/message")
+			{
+				MESSAGE.POST("/image", ctrler.Robot.MessageImage)
+				MESSAGE.POST("/file", ctrler.Robot.MessageFile)
+				MESSAGE.POST("/file_notonline", ctrler.Robot.MessageFileNotonline)
+			}
+		}
+
+		TASK := API.Group("/task")
+		{
+			TASK.GET("/fetch", ctrler.Task.Fetch)
+			TASK.POST("/create", ctrler.Task.Create)
+			TASK.POST("/update", ctrler.Task.Update)
+			TASK.POST("/switch", ctrler.Task.Switch)
+			TASK.GET("/cache", ctrler.Task.Cache)
+			TASK.GET("/log", ctrler.Task.Log)
+			TASK.DELETE("/delete", ctrler.Task.Delete)
+
+			CONFIG := TASK.Group("/config")
+			{
+				QZONEGREET := CONFIG.Group("/qzonegreet")
+				{
+					QZONEGREET.GET("/thread", ctrler.Task.QzonegreetThread)
+					QZONEGREET.GET("/value", ctrler.Task.QzonegreetValue)
+				}
+
+				MATERIALGREET := CONFIG.Group("/materialgreet")
+				{
+					MATERIALGREET.GET("/thread", ctrler.Task.MaterialgreetThread)
+					MATERIALGREET.GET("/value", ctrler.Task.MaterialgreetValue)
+					MATERIALGREET.GET("/friend", ctrler.Task.MaterialgreetFriend)
+					MATERIALGREET.GET("/group", ctrler.Task.MaterialgreetGroup)
+					MATERIALGREET.POST("/recover", ctrler.Task.MaterialgreetRecover)
+					MATERIALGREET.GET("/create_group", ctrler.Task.MaterialgreetCreateGroup)
+					MATERIALGREET.POST("/setting_group", ctrler.Task.MaterialgreetSettingGroup)
+					MATERIALGREET.GET("/update_group", ctrler.Task.MaterialgreetUpdateGroup)
+
+				}
+
+				GROUPCHATPULL := CONFIG.Group("/groupchatpull")
+				{
+					GROUPCHATPULL.GET("/robotdb_value", ctrler.Task.GroupchatpullRobotdbValue)
+					GROUPCHATPULL.GET("/groups", ctrler.Task.GroupchatpullGroups)
+					GROUPCHATPULL.GET("/create_group", ctrler.Task.GroupchatpullCreateGroup)
+					GROUPCHATPULL.POST("/setting_group", ctrler.Task.GroupchatpullSettingGroup)
+					GROUPCHATPULL.POST("/import", ctrler.Task.GroupchatpullImportFans)
+					GROUPCHATPULL.POST("/setting_robot", ctrler.Task.GroupchatpullSettingRobot)
+					GROUPCHATPULL.POST("/setting_fans", ctrler.Task.GroupchatpullSettingFans)
+					GROUPCHATPULL.GET("/export_table", ctrler.Task.GroupchatpullExportTable)
+				}
+
+				QZONEREMARK := CONFIG.Group("/qzoneremark")
+				{
+					QZONEREMARK.GET("/thread", ctrler.Task.QzoneremarkThread)
+					QZONEREMARK.GET("/value", ctrler.Task.QzoneremarkValue)
+				}
+
+				QZONEVISITOR := CONFIG.Group("/qzonevisitor")
+				{
+					QZONEVISITOR.GET("/thread", ctrler.Task.QzonevisitorThread)
+					QZONEVISITOR.GET("/value", ctrler.Task.QzonevisitorValue)
+				}
+
+				QSHOWRECOMMEND := CONFIG.Group("/qshowrecommend")
+				{
+					QSHOWRECOMMEND.GET("/thread", ctrler.Task.QshowrecommendThread)
+					QSHOWRECOMMEND.GET("/value", ctrler.Task.QshowrecommendValue)
+				}
+
+				GROUPMENBER := CONFIG.Group("/groupmenber")
+				{
+					GROUPMENBER.GET("/group", ctrler.Task.GroupmenberGroup)
+				}
+			}
+
+			GREET := TASK.Group("/greet")
+			{
+				RULE := GREET.Group("/rule")
+				{
+					RULE.GET("/fetch", ctrler.TaskGreetRule.Fetch)
+					RULE.POST("/create", ctrler.TaskGreetRule.Create)
+					RULE.POST("/update", ctrler.TaskGreetRule.Update)
+				}
+
+				WORD := GREET.Group("/word")
+				{
+					WORD.GET("/fetch", ctrler.TaskGreetWord.Fetch)
+					WORD.POST("/create", ctrler.TaskGreetWord.Create)
+					WORD.POST("/update", ctrler.TaskGreetWord.Update)
+				}
+			}
+
+			QZONE := TASK.Group("/qzone")
+			{
+				REMARK := QZONE.Group("remark")
+				{
+					RULE := REMARK.Group("/rule")
+					{
+						RULE.GET("/fetch", ctrler.TaskQzoneRemarkRule.Fetch)
+						RULE.POST("/create", ctrler.TaskQzoneRemarkRule.Create)
+						RULE.POST("/update", ctrler.TaskQzoneRemarkRule.Update)
+					}
+				}
+			}
+
+			USEDB := TASK.Group("/usedb")
+			{
+				USEDB.GET("/fetch", ctrler.Usedb.Fetch)
+				USEDB.POST("/create", ctrler.Usedb.Create)
+				USEDB.DELETE("/delete", ctrler.Usedb.Delete)
+			}
+
+			QZONEDB := TASK.Group("/qzonedb")
+			{
+				QZONEDB.GET("/fetch", ctrler.Qzonedb.Fetch)
+				QZONEDB.POST("/create", ctrler.Qzonedb.Create)
+				QZONEDB.DELETE("/delete", ctrler.Qzonedb.Delete)
+				QZONEDB.POST("/create_null", ctrler.Qzonedb.CreateNull)
+			}
+
+			MATERIALDB := TASK.Group("/materialdb")
+			{
+				MATERIALDB.GET("/fetch", ctrler.Materialdb.Fetch)
+				MATERIALDB.POST("/create", ctrler.Materialdb.Create)
+				MATERIALDB.POST("/create_null", ctrler.Materialdb.CreateNull)
+				MATERIALDB.GET("/export", ctrler.Materialdb.Export)
+				MATERIALDB.DELETE("/delete", ctrler.Materialdb.Delete)
+			}
+
+			REALINFODB := TASK.Group("/realinfodb")
+			{
+				REALINFODB.GET("/fetch", ctrler.Realinfodb.Fetch)
+				REALINFODB.POST("/create", ctrler.Realinfodb.Create)
+				REALINFODB.DELETE("/delete", ctrler.Realinfodb.Delete)
+			}
+		}
+	}))
+}
+
+func main() {
+
+	utils.Loop(time.Hour, func(now time.Time) {
+		debug.FreeOSMemory()
+	})
+
+	utils.Loop(time.Second, func(now time.Time) {
+		system_info()
+		runtime.GC()
+	})
+
+	// DEBUG - 已禁用3小时自动退出
+	// end_timer := 0
+	// utils.Loop(time.Second, func(now time.Time) {
+	// 	if end_timer++; end_timer > 60*60*3 {
+	// 		os.Exit(88)
+	// 	}
+	// })
+
+	utils.Setup(debug_quest)
+
+	if define.SYSTEM_MODE == define.SYSTEM_MODE_TEST {
+		test_handle()
+	}
+
+	utils.Exit(func() {
+		ini.Friendb1.DisConnect()
+	})
+}

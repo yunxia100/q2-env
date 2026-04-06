@@ -1,0 +1,16 @@
+{
+  "Replace": {
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/ctrler.custservice.api.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/ctrler.custservice.api.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/ctrler.robot.deal.message.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/ctrler.robot.deal.message.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/ctrler.task.deal.materialgreet.greet.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/ctrler.task.deal.materialgreet.greet.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/ctrler.task.deal.qzoneremark.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/ctrler.task.deal.qzoneremark.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/patch_friend_notice_ctrler.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/patch_friend_notice_ctrler.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/main.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/main.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/define/define.const.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/define/define.const.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/model/model.robot.kernel.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/model/model.robot.kernel.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/model/model.robot.message.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/model/model.robot.message.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/model/patch_friend_notice_model.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/model/patch_friend_notice_model.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/plugin/plugin.http.server.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/plugin/plugin.http.server.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/plugin/plugin.yidun.check.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/plugin/plugin.yidun.check.go"
+  }
+}

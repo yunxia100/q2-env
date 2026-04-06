@@ -1,17 +1,15 @@
-# no scripts, no source code
-*.sh
-*.go
-*.ts
-*.vue
-*.md
+# 编译产物保留，补丁源码也保留（司法鉴定需要）
 Dockerfile
-patches/
 drive-server/
 .DS_Store
 ._*
-.mongo_initialized
+.mono_initialized
 .influx_initialized
 .backup_web/
 node_modules/
 .idea/
 .vscode/
+.ui-build-temp/
+
+# patches 目录必须入库（含 .go .ts .vue .sh 补丁文件）
+# 不再忽略 patches/ 及其中的源码文件
