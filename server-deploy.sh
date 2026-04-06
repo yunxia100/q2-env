@@ -29,6 +29,12 @@ HTTP_PORT="8080"                                # 服务端口
 GIT_REPO="https://github.com/yunxia100/q2-env.git"
 ENV="/root/env"                                 # 补丁仓库存放目录
 
+# ---- 底层驱动 ----
+DRIVE_MAPPING="server1#client#8.9.80#http://8.130.31.166:8098"
+DRIVE_TIMEOUT=30
+DRIVE_MAX_CONN=50
+MOBILE_PORT=16100
+
 # ---- 数据库配置 ----
 MONGO_USER="admin"
 MONGO_PASS="admin"
@@ -290,8 +296,8 @@ do_start() {
     export INFLUX1_URL=http://localhost:8086 INFLUX1_ORG=$INFLUX_ORG INFLUX1_TOKEN=$INFLUX_TOKEN
     export FRIENDB1_FILE_PATH=./data/friendb/friends.friendb FRIENDB1_TOTAL=100000
     export IP2REGION1_FILE_PATH=./data/ip2region/ip2region.xdb
-    export DRIVE_MAPPING=server1#client#8.9.80#http://8.130.31.166:8098
-    export DRIVE_TIMEOUT=30 DRIVE_MAX_CONN=50 MOBILE_PORT=16100
+    export DRIVE_MAPPING="$DRIVE_MAPPING"
+    export DRIVE_TIMEOUT=$DRIVE_TIMEOUT DRIVE_MAX_CONN=$DRIVE_MAX_CONN MOBILE_PORT=$MOBILE_PORT
 
     pkill -f q2-env-patch 2>/dev/null; sleep 1
     nohup "$BINARY" > "$BASE/server.log" 2>&1 &
