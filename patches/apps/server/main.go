@@ -667,11 +667,6 @@ func init() {
 							table_robot.Kernel.SoftWare = robot_batch.Device.Software
 							table_robot.Kernel.Version = robot_batch.Device.SoftwareVersion
 
-							// 用 PingPong 验证 objid 是否有效
-							if _, pingErr := table_robot.PingPong(); pingErr != nil {
-								results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Msg: "objid无效或设备离线: " + pingErr.Error()})
-								continue
-							}
 							reused = true
 						} else {
 							// ====== 创建新设备 ======
