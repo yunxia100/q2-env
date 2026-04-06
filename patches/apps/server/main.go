@@ -560,7 +560,11 @@ func init() {
 				BATCH.GET("/info", ctrler.RobotBatch.Info)
 				BATCH.GET("/status", ctrler.RobotBatch.Status)
 
-				// [PATCH] 批量账密提交 - 支持 账号----密码 或 账号----密码----guid 格式
+				// [PATCH] 批量账密提交
+				// 支持格式:
+				//   账号----密码              → 创建新设备 + 登录
+				//   账号----密码----objid     → 复用已有设备（避免风控）
+				// objid: 底层驱动的5位设备ID，用于重部署后恢复已在线的账号
 				BATCH.POST("/account_submit", func(ctx *gin.Context) {
 					var req struct {
 						Key   string   `json:"key"`
@@ -590,6 +594,8 @@ func init() {
 						Uid     int    `json:"uid"`
 						Success bool   `json:"success"`
 						Msg     string `json:"msg"`
+						Objid   string `json:"objid,omitempty"`
+						Reused  bool   `json:"reused,omitempty"`
 					}
 					var results []SubmitResult
 
@@ -599,19 +605,19 @@ func init() {
 							continue
 						}
 
-						// 用正则按4个以上连续短横线分割，兼容 ---- / ----- / ------ 等
+						// 用正则按4个以上连续短横线分割
 						sepRe := regexp.MustCompile(`-{4,}`)
 						parts := sepRe.Split(line, -1)
 						if len(parts) < 2 || len(parts) > 3 {
-							results = append(results, SubmitResult{Line: line, Success: false, Msg: "格式错误，需要 账号----密码 或 账号----密码----guid"})
+							results = append(results, SubmitResult{Line: line, Success: false, Msg: "格式错误，需要 账号----密码 或 账号----密码----objid"})
 							continue
 						}
 
 						uidStr := strings.TrimSpace(parts[0])
 						password := strings.TrimSpace(parts[1])
-						guidHex := ""
+						bindObjid := ""
 						if len(parts) == 3 {
-							guidHex = strings.TrimSpace(parts[2])
+							bindObjid = strings.TrimSpace(parts[2])
 						}
 
 						uid, err := strconv.Atoi(uidStr)
@@ -625,9 +631,19 @@ func init() {
 							continue
 						}
 
-						// 检查QQ号是否已存在
+						// 检查QQ号是否已存在（内存中）
 						if existRobot := self.Robots.ExistedByUid(uid); existRobot != nil {
-							results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Msg: "账号已存在"})
+							// 如果提供了新的objid，更新已有记录的设备绑定
+							if bindObjid != "" && len(bindObjid) == 5 && existRobot.Kernel.Objid != bindObjid {
+								existRobot.Kernel.Objid = bindObjid
+								existRobot.Submit.Password = password
+								existRobot.Status.Login = nil           // 清除旧登录状态，让系统重新登录
+								existRobot.Cache.Offline = ""
+								existRobot.Stop = false
+								results = append(results, SubmitResult{Line: line, Uid: uid, Success: true, Objid: bindObjid, Reused: true, Msg: "已更新设备绑定"})
+							} else {
+								results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Objid: existRobot.Kernel.Objid, Msg: "账号已存在"})
+							}
 							continue
 						}
 
@@ -642,21 +658,49 @@ func init() {
 							SoftwareVersion: robot_batch.Device.SoftwareVersion,
 						})
 
-						// 创建设备内核
-						if err := table_robot.CreateKernel(
-							robot_batch.Device.Hardware,
-							robot_batch.Device.Software,
-							robot_batch.Device.SoftwareVersion,
-						); err != nil {
-							results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Msg: "创建设备失败: " + err.Error()})
-							continue
+						reused := false
+						if bindObjid != "" && len(bindObjid) == 5 {
+							// ====== 复用已有设备（避免风控）======
+							// 跳过 CreateKernel，直接使用已有的 objid
+							table_robot.Kernel.Objid = bindObjid
+							table_robot.Kernel.Hardware = robot_batch.Device.Hardware
+							table_robot.Kernel.SoftWare = robot_batch.Device.Software
+							table_robot.Kernel.Version = robot_batch.Device.SoftwareVersion
+
+							// 用 PingPong 验证 objid 是否有效
+							if _, pingErr := table_robot.PingPong(); pingErr != nil {
+								results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Msg: "objid无效或设备离线: " + pingErr.Error()})
+								continue
+							}
+							reused = true
+						} else {
+							// ====== 创建新设备 ======
+							if err := table_robot.CreateKernel(
+								robot_batch.Device.Hardware,
+								robot_batch.Device.Software,
+								robot_batch.Device.SoftwareVersion,
+							); err != nil {
+								results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Msg: "创建设备失败: " + err.Error()})
+								continue
+							}
 						}
-						_ = guidHex // guid 参数暂不使用
 
 						// 设置提交信息
 						table_robot.Submit.Uid = uid
 						table_robot.Submit.Password = password
 						table_robot.Status.Register = &model.RobotStatusCurrent{}
+
+						// 如果是复用设备，标记为已登录成功，跳过重复登录
+						if reused {
+							table_robot.Kernel.UserLoginData.Uin = uid
+							table_robot.Status.Login = &model.RobotStatusLogin{
+								Time: time.Now().UnixMilli(),
+								Code: define.ROBOT_LOGIN_STATUS_SUCC,
+							}
+							table_robot.Status.RenewOnline = &model.RobotStatusCurrent{
+								Time: time.Now().UnixMilli(),
+							}
+						}
 
 						// 分配代理
 						if table_proxy := self.Proxys.GetRandom(robot_batch.UserId, nil, "", true); table_proxy != nil {
@@ -676,7 +720,11 @@ func init() {
 						self.Robots.Create(&table_robot)
 						robot_batch.Cache.RobotUpdateTime = time.Now().UnixMilli()
 
-						results = append(results, SubmitResult{Line: line, Uid: uid, Success: true, Msg: "提交成功"})
+						msg := "提交成功"
+						if reused {
+							msg = "提交成功（复用已有设备，跳过登录）"
+						}
+						results = append(results, SubmitResult{Line: line, Uid: uid, Success: true, Objid: table_robot.Kernel.Objid, Reused: reused, Msg: msg})
 					}
 
 					// 更新用户统计信息
