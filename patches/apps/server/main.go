@@ -288,6 +288,7 @@ func init() {
 					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "参数错误", err.Error())
 					return
 				}
+				req.GroupCode = strings.TrimSpace(req.GroupCode)
 				if req.RobotId == "" || req.GroupCode == "" {
 					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "请填写机器人ID和群号", nil)
 					return
@@ -304,24 +305,22 @@ func init() {
 				}
 
 				groupUid, _ := strconv.Atoi(req.GroupCode)
-
-				// 始终先搜索群获取 JoinGroupAuth（驱动要求 authKey）
-				searchResult, err := robot.SearchGroup(req.GroupCode, nil)
-				if err != nil {
-					plugin.HttpDefault(ctx, plugin.REQUEST_SERVER_ERROR, "搜索群失败: "+err.Error(), nil)
-					return
-				}
-				if searchResult.ResultCode != 0 {
-					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "搜索群失败: "+searchResult.ErrorMsg, nil)
+				if groupUid == 0 {
+					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "群号格式错误，请输入纯数字", nil)
 					return
 				}
 
+				// 搜索群获取 JoinGroupAuth（驱动需要 authKey 才能发验证语）
+				// 搜索失败不阻止入群，继续尝试直接申请
 				joinGroupAuth := ""
 				groupName := ""
-				if searchResult.ItemGroups != nil {
+				searchResult, searchErr := robot.SearchGroup(req.GroupCode, nil)
+				if searchErr == nil && searchResult.ResultCode == 0 && searchResult.ItemGroups != nil {
+					groupCodeStr := strconv.Itoa(groupUid) // 统一用数字字符串比较，避免前导/尾部空格问题
 					for _, groups := range *searchResult.ItemGroups {
 						for _, item := range groups.ResultItems {
-							if item.ResultId == req.GroupCode {
+							itemId := strings.TrimSpace(item.ResultId)
+							if itemId == groupCodeStr || itemId == req.GroupCode {
 								var ext model.RobotSearchResultExtensionGroup
 								utils.InterfaceToStruct(item.Extension, &ext)
 								joinGroupAuth = ext.JoinGroupAuth
@@ -329,23 +328,23 @@ func init() {
 								break
 							}
 						}
-						if joinGroupAuth != "" {
+						if groupName != "" {
 							break
 						}
 					}
 				}
-				if joinGroupAuth == "" {
-					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "搜索不到此群，请检查群号", nil)
-					return
-				}
 
+				// 根据是否有验证语、是否拿到 authKey 选择入群方式
 				var enterResult model.RobotEnterGroupResult
-				if req.Hello != "" {
-					// 有验证语: 构造带 authKey 的 URL 传给 EnterGroupSendHello
+				if req.Hello != "" && joinGroupAuth != "" {
+					// 有验证语 + authKey：构造入群链接，带验证语申请
 					authUrl := "https://qm.qq.com/join?authKey=" + joinGroupAuth
 					enterResult, err = robot.EnterGroupSendHello(groupUid, authUrl, req.Hello, nil)
+				} else if req.Hello != "" {
+					// 有验证语但搜索未拿到 authKey：尝试不带 URL 直接发验证语
+					enterResult, err = robot.EnterGroupSendHello(groupUid, "", req.Hello, nil)
 				} else {
-					// 无验证语: 用 search 方式入群
+					// 无验证语：search 方式入群（公开群 joinGroupAuth 可为空）
 					enterResult, err = robot.EnterGroup(groupUid, "search", "", joinGroupAuth, nil)
 				}
 				if err != nil {
@@ -353,13 +352,27 @@ func init() {
 					return
 				}
 				if enterResult.Result != 0 {
-					plugin.HttpDefault(ctx, plugin.REQUEST_BAD,
-						fmt.Sprintf("入群失败！错误码: %d/%d, 提示: %s", enterResult.Result, enterResult.ErrorCode, enterResult.ErrorString), nil)
+					hint := enterResult.ErrorString
+					if hint == "" {
+						switch enterResult.Result {
+						case 1:
+							hint = "已在群内或申请已发送，请等待审核"
+						case 3:
+							hint = "机器人无权申请该群"
+						default:
+							hint = fmt.Sprintf("错误码 %d/%d", enterResult.Result, enterResult.ErrorCode)
+						}
+					}
+					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "入群失败："+hint, nil)
 					return
 				}
 
+				msg := "申请入群成功，等待审核"
+				if groupName != "" {
+					msg = fmt.Sprintf("已申请加入「%s」，等待审核", groupName)
+				}
 				plugin.HttpSuccess(ctx, map[string]interface{}{
-					"message":    "申请入群成功，等待审核",
+					"message":    msg,
 					"group_code": req.GroupCode,
 					"group_name": groupName,
 				})
@@ -653,7 +666,7 @@ func init() {
 									existRobot.Status.RenewSecretKey.Time = time.Now().Unix()
 									existRobot.Status.RenewSecretKey.Timer = time.Now().Unix() + define.INTERVAL_RENEW_SECRET_KEY
 								}
-								existRobot.Stop = true
+								existRobot.Stop = false
 								results = append(results, SubmitResult{Line: line, Uid: uid, Success: true, Objid: bindObjid, Reused: true, Msg: "已更新设备绑定（使用现有会话）"})
 							} else {
 								results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Objid: existRobot.Kernel.Objid, Msg: "账号已存在"})
@@ -718,7 +731,7 @@ func init() {
 							table_robot.Status.RenewOnline.Time = time.Now().Unix()
 							table_robot.Status.RenewOnline.Timer = time.Now().Unix() + define.INTERVAL_RENEW_ONLINE
 
-							table_robot.Stop = true
+							table_robot.Stop = false
 						}
 
 						// 分配代理（安全调用：代理列表为空时 GetRandom 内部会 panic，用 recover 保护）
@@ -760,6 +773,46 @@ func init() {
 					plugin.HttpSuccess(ctx, results)
 				})
 			}
+
+			// [PATCH] 强制设置机器人已登录状态（复用已有底层驱动会话）
+			// POST /api/robot/force_login?robot_id=xxx&objid=yyy
+			ROBOT.POST("/force_login", func(ctx *gin.Context) {
+				robotIdStr := ctx.Query("robot_id")
+				objid := ctx.Query("objid")
+				if robotIdStr == "" || objid == "" {
+					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "请提供 robot_id 和 objid", nil)
+					return
+				}
+				robotObjId, err := primitive.ObjectIDFromHex(robotIdStr)
+				if err != nil {
+					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "robot_id 格式错误", nil)
+					return
+				}
+				robot := self.Robots.Existed(robotObjId)
+				if robot == nil {
+					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "机器人不存在", nil)
+					return
+				}
+				// 更新 objid 并标记已登录
+				robot.Kernel.Objid = objid
+				robot.Cache.Offline = ""
+				loginStatus := &model.RobotStatusLogin{}
+				loginStatus.Time = time.Now().UnixMilli()
+				loginStatus.Code = define.ROBOT_LOGIN_STATUS_SUCC
+				robot.Status.Login = loginStatus
+				if robot.Status.RenewSecretKey == nil {
+					robot.Status.RenewSecretKey = &model.RobotStatusCurrent{}
+					robot.Status.RenewSecretKey.Time = time.Now().Unix()
+					robot.Status.RenewSecretKey.Timer = time.Now().Unix() + define.INTERVAL_RENEW_SECRET_KEY
+				}
+				if robot.Status.RenewOnline == nil {
+					robot.Status.RenewOnline = &model.RobotStatusCurrent{}
+					robot.Status.RenewOnline.Time = time.Now().Unix()
+					robot.Status.RenewOnline.Timer = time.Now().Unix() + define.INTERVAL_RENEW_ONLINE
+				}
+				robot.Stop = false
+				plugin.HttpSuccess(ctx, map[string]string{"objid": objid, "msg": "已强制设置登录成功"})
+			})
 
 			// [PATCH] 获取好友请求列表（陌生人加好友）
 			ROBOT.GET("/friend_notices", func(ctx *gin.Context) {
