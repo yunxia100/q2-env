@@ -10,12 +10,12 @@ import (
 
 type PatchFriendMsg struct {
 	Version int   `json:"version"`
-	MsgType int   `json:"msgType"`
+	MsgType int64 `json:"msgType"`
 	MsgSeq  int64 `json:"msgSeq"`
 	MsgTime int64 `json:"msgTime"`
 	ReqUin  int64 `json:"reqUin"`
 	Msg     *struct {
-		SubType       int    `json:"subType"`
+		SubType       int64  `json:"subType"`
 		MsgTitle      string `json:"msgTitle"`
 		MsgDescribe   string `json:"msgDescribe"`
 		MsgAdditional string `json:"msgAdditional"`
