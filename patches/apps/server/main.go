@@ -328,6 +328,14 @@ func init() {
 								groupAllow = ext.Allow
 								groupName = item.Name
 								groupFound = true
+								// [PATCH-DEBUG] 打印 extension 原始内容，排查 joinGroupAuth 为空的原因
+								logrus.WithFields(logrus.Fields{
+									"group_code":      itemId,
+									"group_name":      item.Name,
+									"allow":           ext.Allow,
+									"join_group_auth": ext.JoinGroupAuth,
+									"raw_extension":   fmt.Sprintf("%+v", item.Extension),
+								}).Info("[PATCH-JOIN-DEBUG] search group extension")
 								break
 							}
 						}
