@@ -358,18 +358,22 @@ func init() {
 				}
 
 				// 根据是否有验证语选择入群方式
+				// authUrl 是驱动必须传入的上下文 URL，即使免验证也需要
+				authUrl := ""
+				if joinGroupAuth != "" {
+					authUrl = "https://qm.qq.com/join?authKey=" + joinGroupAuth
+				}
 				var enterResult model.RobotEnterGroupResult
 				if req.Hello != "" {
-					// 有验证语：需要 joinGroupAuth 构造入群链接
+					// 有验证语：带验证语申请入群
 					if joinGroupAuth == "" {
 						plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "无法获取群入群凭证，无法发送验证语", nil)
 						return
 					}
-					authUrl := "https://qm.qq.com/join?authKey=" + joinGroupAuth
 					enterResult, err = robot.EnterGroupSendHello(groupUid, authUrl, req.Hello, nil)
 				} else {
-					// 无验证语：直接以 search 方式申请入群（免验证群 joinGroupAuth 可为空）
-					enterResult, err = robot.EnterGroup(groupUid, "search", "", joinGroupAuth, nil)
+					// 无验证语：以 search 方式申请入群，需传 authUrl 作为上下文
+					enterResult, err = robot.EnterGroup(groupUid, "search", authUrl, joinGroupAuth, nil)
 				}
 				if err != nil {
 					plugin.HttpDefault(ctx, plugin.REQUEST_SERVER_ERROR, "申请入群失败: "+err.Error(), nil)
