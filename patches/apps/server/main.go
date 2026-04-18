@@ -314,7 +314,7 @@ func init() {
 				// 搜索群获取 JoinGroupAuth（驱动必须有 authKey 才能真正入群）
 				joinGroupAuth := ""
 				groupName := ""
-				groupAllow := 0 // 0=需审核, 1=免验证直接入群
+				groupAllow := 0 // 0=需审核, 1=群设置免验证
 				groupFound := false
 				searchResult, searchErr := robot.SearchGroup(req.GroupCode, nil)
 				if searchErr == nil && searchResult.ResultCode == 0 && searchResult.ItemGroups != nil {
@@ -329,14 +329,6 @@ func init() {
 								groupAllow = ext.Allow
 								groupName = item.Name
 								groupFound = true
-								// [PATCH-DEBUG] 打印 extension 原始内容，排查 joinGroupAuth 为空的原因
-								logrus.WithFields(logrus.Fields{
-									"group_code":      itemId,
-									"group_name":      item.Name,
-									"allow":           ext.Allow,
-									"join_group_auth": ext.JoinGroupAuth,
-									"raw_extension":   fmt.Sprintf("%+v", item.Extension),
-								}).Info("[PATCH-JOIN-DEBUG] search group extension")
 								break
 							}
 						}
@@ -346,9 +338,6 @@ func init() {
 					}
 				}
 
-				// 若搜索完全失败或找不到群，则报错
-				// 注意：allow=1（免验证群）可能 joinGroupAuth 为空，驱动仍可直接加入，不拦截
-				// 仅当 allow=0（需审核群）且 joinGroupAuth 为空时才拦截（驱动需要 authKey 才能发验证语）
 				if !groupFound {
 					errMsg := fmt.Sprintf("未找到群 %s，请确认群号正确", req.GroupCode)
 					if searchErr != nil {
@@ -358,38 +347,82 @@ func init() {
 					return
 				}
 
-				// 根据是否有验证语选择入群方式
-				// authUrl 是驱动必须传入的上下文 URL，即使免验证也需要
 				authUrl := ""
 				if joinGroupAuth != "" {
 					authUrl = "https://qm.qq.com/join?authKey=" + joinGroupAuth
 				}
+
+				// [PATCH-FIX] 免验证群必须先调 getGroupJoinFlag 查询此账号是否真正可以免验证入群
+				// QQ 服务端可能对特定账号返回 no_verify=0（即使群设置 allow=1 也需要验证语）
+				noVerify := 1 // 默认乐观，非免验证群不需要查
+				if groupAllow == 1 && joinGroupAuth != "" {
+					type joinFlagResp struct {
+						NoVerify      int `json:"no_verify"`
+						HighRiskGroup int `json:"highRiskGroup"`
+					}
+					var flagResult joinFlagResp
+					_, _, flagContent, flagErr := robot.Client().PostForm(
+						"/device/getGroupJoinFlag",
+						map[string]string{"Accept": "application/json"},
+						map[string]string{"objid": robot.Kernel.Objid},
+						map[string]string{
+							"groupCode": req.GroupCode,
+							"url":       authUrl,
+						},
+					)
+					logrus.WithFields(logrus.Fields{
+						"group_code":    req.GroupCode,
+						"flag_response": string(flagContent),
+						"flag_err":      fmt.Sprintf("%v", flagErr),
+					}).Info("[PATCH-JOIN-FLAG] getGroupJoinFlag")
+					if flagErr == nil && len(flagContent) > 0 {
+						if e := json.Unmarshal(flagContent, &flagResult); e == nil {
+							noVerify = flagResult.NoVerify
+							logrus.WithFields(logrus.Fields{
+								"group_code":     req.GroupCode,
+								"no_verify":      flagResult.NoVerify,
+								"high_risk_group": flagResult.HighRiskGroup,
+							}).Info("[PATCH-JOIN-FLAG] no_verify result")
+						}
+					}
+				}
+
+				// 根据 no_verify 和 hello 决定入群方式
 				var enterResult model.RobotEnterGroupResult
 				if req.Hello != "" {
-					// 有验证语：带验证语申请入群
+					// 有验证语：无论 no_verify 如何，用带验证语方式申请
 					if joinGroupAuth == "" {
-						plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "无法获取群入群凭证，无法发送验证语", nil)
+						plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "无法获取入群凭证，无法发送验证语", nil)
 						return
 					}
 					enterResult, err = robot.EnterGroupSendHello(groupUid, authUrl, req.Hello, nil)
+				} else if groupAllow == 1 && noVerify == 0 {
+					// 群设置免验证，但 QQ 服务端判定此账号需要验证语
+					hint := fmt.Sprintf("此机器人账号加入群「%s」需要填写验证语，请输入验证语后重试", groupName)
+					if groupName == "" {
+						hint = "此机器人账号加入该群需要填写验证语，请输入验证语后重试"
+					}
+					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, hint, nil)
+					return
 				} else {
-					// 无验证语：以 search 方式申请入群，需传 authUrl 作为上下文
+					// 可直接申请（免验证 no_verify=1，或需审核群）
 					enterResult, err = robot.EnterGroup(groupUid, "search", authUrl, joinGroupAuth, nil)
 				}
+
 				if err != nil {
 					plugin.HttpDefault(ctx, plugin.REQUEST_SERVER_ERROR, "申请入群失败: "+err.Error(), nil)
 					return
 				}
-				// [PATCH-DEBUG] 打印驱动完整返回
+
 				logrus.WithFields(logrus.Fields{
-					"group_code":    req.GroupCode,
-					"allow":         groupAllow,
-					"result":        enterResult.Result,
-					"error_code":    enterResult.ErrorCode,
-					"error_string":  enterResult.ErrorString,
-					"auth_key_len":  len(joinGroupAuth),
-					"auth_url":      authUrl,
+					"group_code":   req.GroupCode,
+					"allow":        groupAllow,
+					"no_verify":    noVerify,
+					"result":       enterResult.Result,
+					"error_code":   enterResult.ErrorCode,
+					"error_string": enterResult.ErrorString,
 				}).Info("[PATCH-JOIN-RESULT] groupMng response")
+
 				if enterResult.Result != 0 {
 					hint := enterResult.ErrorString
 					if hint == "" {
@@ -406,37 +439,14 @@ func init() {
 					return
 				}
 
-				// 根据群的 Allow 字段给出准确提示
+				// result=0：驱动已成功提交，给出准确提示
 				var msg string
 				if groupAllow == 1 {
-					// 免验证群：等待 3 秒后检查群列表，确认是否真正入群
-					time.Sleep(3 * time.Second)
-					confirmed := false
-					groupListResult, listErr := robot.GetGroupList()
-					if listErr == nil {
-						listBytes, _ := json.Marshal(groupListResult)
-						listStr := string(listBytes)
-						confirmed = strings.Contains(listStr, req.GroupCode)
-					}
-					logrus.WithFields(logrus.Fields{
-						"group_code": req.GroupCode,
-						"confirmed":  confirmed,
-						"list_err":   fmt.Sprintf("%v", listErr),
-					}).Info("[PATCH-JOIN-VERIFY] group list check after join")
-
-					if confirmed {
-						if groupName != "" {
-							msg = fmt.Sprintf("机器人已成功加入群「%s」", groupName)
-						} else {
-							msg = fmt.Sprintf("机器人已成功加入群 %s", req.GroupCode)
-						}
+					// 免验证群 result=0 = 已加入
+					if groupName != "" {
+						msg = fmt.Sprintf("机器人已成功加入群「%s」", groupName)
 					} else {
-						// 驱动返回成功但群列表未更新，可能需要更长时间
-						if groupName != "" {
-							msg = fmt.Sprintf("入群请求已发送至「%s」（免验证），若3分钟内群列表未更新请重试", groupName)
-						} else {
-							msg = "入群请求已发送（免验证），若3分钟内群列表未更新请重试"
-						}
+						msg = fmt.Sprintf("机器人已成功加入群 %s", req.GroupCode)
 					}
 				} else {
 					if groupName != "" {
