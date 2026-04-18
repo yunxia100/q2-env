@@ -117,7 +117,7 @@ func (robot *Robot) FriendPass(reqUin, srcId, subSrcId string) (*RobotFriendPass
 // ========== 前端所需的响应类型 ==========
 
 type PatchFriendNoticeItem struct {
-	MsgType       int    `json:"msg_type"`
+	MsgType       int64  `json:"msg_type"`
 	MsgSeq        int64  `json:"msg_seq"`
 	MsgTime       int64  `json:"msg_time"`
 	ReqUin        int64  `json:"req_uin"`
