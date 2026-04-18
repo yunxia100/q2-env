@@ -352,6 +352,14 @@ func init() {
 					authUrl = "https://qm.qq.com/join?authKey=" + joinGroupAuth
 				}
 
+				logrus.WithFields(logrus.Fields{
+					"group_code":      req.GroupCode,
+					"group_allow":     groupAllow,
+					"group_name":      groupName,
+					"join_group_auth": joinGroupAuth,
+					"auth_url":        authUrl,
+				}).Info("[PATCH-JOIN-DEBUG] search result")
+
 				// [PATCH-FIX] 免验证群必须先调 getGroupJoinFlag 查询此账号是否真正可以免验证入群
 				// QQ 服务端可能对特定账号返回 no_verify=0（即使群设置 allow=1 也需要验证语）
 				noVerify := 1 // 默认乐观，非免验证群不需要查
@@ -389,8 +397,11 @@ func init() {
 
 				// 根据 no_verify 和 hello 决定入群方式
 				var enterResult model.RobotEnterGroupResult
-				if req.Hello != "" {
-					// 有验证语：无论 no_verify 如何，用带验证语方式申请
+				if noVerify == 1 {
+					// 免验证群：无论是否有验证语，直接走 EnterGroup 加入
+					enterResult, err = robot.EnterGroup(groupUid, "search", authUrl, joinGroupAuth, nil)
+				} else if req.Hello != "" {
+					// 需要验证语，且用户已填写：用带招呼语方式申请（等待管理员审批）
 					if joinGroupAuth == "" {
 						plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "无法获取入群凭证，无法发送验证语", nil)
 						return
@@ -405,7 +416,7 @@ func init() {
 					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, hint, nil)
 					return
 				} else {
-					// 可直接申请（免验证 no_verify=1，或需审核群）
+					// 其他情况（需审核群等）：提交申请
 					enterResult, err = robot.EnterGroup(groupUid, "search", authUrl, joinGroupAuth, nil)
 				}
 
