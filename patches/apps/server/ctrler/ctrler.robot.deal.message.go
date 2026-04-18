@@ -98,6 +98,16 @@ func (ctrler *ctrler_robot) messagging() {
 func (ctrler *ctrler_robot) messsage_handle(robot *model.Robot) (done bool, err error) {
 
 	status := &robot.Status.Message
+
+	// [PATCH] 若 status.Time 是未来时间戳（服务重启后从 MongoDB 加载了新机器人数据），
+	// 立即重置，防止 time.Now()-status.Time 为负数导致 fallback 永远不触发
+	if status.Time > time.Now().Unix()+60 {
+		slog.Debug("Robot", "step", "message_time_reset", "uid", robot.Kernel.UserLoginData.Uin, "old_time", status.Time)
+		status.Time = time.Now().Unix() - 60
+		status.Timer = status.Time
+		robot.Update(plugin.Bson{"status.message": status})
+	}
+
 	timer := status.Timer
 
 	if status.Time != 0 && status.Time == timer {
