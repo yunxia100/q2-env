@@ -310,14 +310,14 @@ func init() {
 					return
 				}
 
-				// 搜索群获取 JoinGroupAuth（驱动需要 authKey 才能发验证语）
-				// 搜索失败不阻止入群，继续尝试直接申请
+				// 搜索群获取 JoinGroupAuth（驱动必须有 authKey 才能真正入群）
 				joinGroupAuth := ""
 				groupName := ""
 				groupAllow := 0 // 0=需审核, 1=免验证直接入群
+				groupFound := false
 				searchResult, searchErr := robot.SearchGroup(req.GroupCode, nil)
 				if searchErr == nil && searchResult.ResultCode == 0 && searchResult.ItemGroups != nil {
-					groupCodeStr := strconv.Itoa(groupUid) // 统一用数字字符串比较，避免前导/尾部空格问题
+					groupCodeStr := strconv.Itoa(groupUid)
 					for _, groups := range *searchResult.ItemGroups {
 						for _, item := range groups.ResultItems {
 							itemId := strings.TrimSpace(item.ResultId)
@@ -327,26 +327,37 @@ func init() {
 								joinGroupAuth = ext.JoinGroupAuth
 								groupAllow = ext.Allow
 								groupName = item.Name
+								groupFound = true
 								break
 							}
 						}
-						if groupName != "" {
+						if groupFound {
 							break
 						}
 					}
 				}
 
-				// 根据是否有验证语、是否拿到 authKey 选择入群方式
+				// 驱动要求 joinGroupAuth 不能为空才能真正执行入群
+				// 若搜索未拿到 authKey，直接报错，避免驱动静默失败（返回 result=0 但实际未加入）
+				if joinGroupAuth == "" {
+					errMsg := "无法获取群入群凭证(authKey)，请确认群号正确或稍后重试"
+					if searchErr != nil {
+						errMsg = "搜索群信息失败: " + searchErr.Error()
+					} else if !groupFound {
+						errMsg = fmt.Sprintf("未找到群 %s，请确认群号正确", req.GroupCode)
+					}
+					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, errMsg, nil)
+					return
+				}
+
+				// 根据是否有验证语选择入群方式
 				var enterResult model.RobotEnterGroupResult
-				if req.Hello != "" && joinGroupAuth != "" {
-					// 有验证语 + authKey：构造入群链接，带验证语申请
+				if req.Hello != "" {
+					// 有验证语：带验证语申请入群
 					authUrl := "https://qm.qq.com/join?authKey=" + joinGroupAuth
 					enterResult, err = robot.EnterGroupSendHello(groupUid, authUrl, req.Hello, nil)
-				} else if req.Hello != "" {
-					// 有验证语但搜索未拿到 authKey：尝试不带 URL 直接发验证语
-					enterResult, err = robot.EnterGroupSendHello(groupUid, "", req.Hello, nil)
 				} else {
-					// 无验证语：search 方式入群（公开群 joinGroupAuth 可为空）
+					// 无验证语：直接以 search 方式申请入群
 					enterResult, err = robot.EnterGroup(groupUid, "search", "", joinGroupAuth, nil)
 				}
 				if err != nil {
@@ -369,14 +380,13 @@ func init() {
 					return
 				}
 
-				// 根据群的 Allow 字段给出准确提示：
-				// allow=1 免验证群 → 已直接加入；allow=0 需审核群 → 申请已发送等待审核
+				// 根据群的 Allow 字段给出准确提示
 				var msg string
 				if groupAllow == 1 {
 					if groupName != "" {
-						msg = fmt.Sprintf("已成功加入群「%s」", groupName)
+						msg = fmt.Sprintf("入群申请已提交「%s」，免验证群稍后将自动加入", groupName)
 					} else {
-						msg = "已成功加入群"
+						msg = "入群申请已提交，免验证群稍后将自动加入"
 					}
 				} else {
 					if groupName != "" {
