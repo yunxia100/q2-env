@@ -379,6 +379,16 @@ func init() {
 					plugin.HttpDefault(ctx, plugin.REQUEST_SERVER_ERROR, "申请入群失败: "+err.Error(), nil)
 					return
 				}
+				// [PATCH-DEBUG] 打印驱动完整返回
+				logrus.WithFields(logrus.Fields{
+					"group_code":    req.GroupCode,
+					"allow":         groupAllow,
+					"result":        enterResult.Result,
+					"error_code":    enterResult.ErrorCode,
+					"error_string":  enterResult.ErrorString,
+					"auth_key_len":  len(joinGroupAuth),
+					"auth_url":      authUrl,
+				}).Info("[PATCH-JOIN-RESULT] groupMng response")
 				if enterResult.Result != 0 {
 					hint := enterResult.ErrorString
 					if hint == "" {
