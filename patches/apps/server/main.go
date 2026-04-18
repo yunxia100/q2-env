@@ -304,6 +304,10 @@ func init() {
 					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "机器人不存在", nil)
 					return
 				}
+				if !robot.Online {
+					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "机器人当前离线，请先让机器人上线后再申请入群", nil)
+					return
+				}
 
 				groupUid, _ := strconv.Atoi(req.GroupCode)
 				if groupUid == 0 {
@@ -450,10 +454,17 @@ func init() {
 					return
 				}
 
-				// result=0：驱动已成功提交，给出准确提示
+				// result=0：根据 error_code 和 allow 给出准确提示
 				var msg string
-				if groupAllow == 1 {
-					// 免验证群 result=0 = 已加入
+				if enterResult.ErrorCode == 1 {
+					// error_code=1 = 申请已提交但等待审核（QQ 风控或群实际需要审核）
+					if groupName != "" {
+						msg = fmt.Sprintf("申请已发送，等待群「%s」管理员审核（若群免验证但仍待审核，可能是账号风控限制）", groupName)
+					} else {
+						msg = "申请已发送，等待管理员审核（若群免验证但仍待审核，可能是账号风控限制）"
+					}
+				} else if groupAllow == 1 {
+					// 免验证群 + error_code=0 = 已直接加入
 					if groupName != "" {
 						msg = fmt.Sprintf("机器人已成功加入群「%s」", groupName)
 					} else {
