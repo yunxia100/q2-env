@@ -314,6 +314,7 @@ func init() {
 				// 搜索失败不阻止入群，继续尝试直接申请
 				joinGroupAuth := ""
 				groupName := ""
+				groupAllow := 0 // 0=需审核, 1=免验证直接入群
 				searchResult, searchErr := robot.SearchGroup(req.GroupCode, nil)
 				if searchErr == nil && searchResult.ResultCode == 0 && searchResult.ItemGroups != nil {
 					groupCodeStr := strconv.Itoa(groupUid) // 统一用数字字符串比较，避免前导/尾部空格问题
@@ -324,6 +325,7 @@ func init() {
 								var ext model.RobotSearchResultExtensionGroup
 								utils.InterfaceToStruct(item.Extension, &ext)
 								joinGroupAuth = ext.JoinGroupAuth
+								groupAllow = ext.Allow
 								groupName = item.Name
 								break
 							}
@@ -367,14 +369,27 @@ func init() {
 					return
 				}
 
-				msg := "申请入群成功，等待审核"
-				if groupName != "" {
-					msg = fmt.Sprintf("已申请加入「%s」，等待审核", groupName)
+				// 根据群的 Allow 字段给出准确提示：
+				// allow=1 免验证群 → 已直接加入；allow=0 需审核群 → 申请已发送等待审核
+				var msg string
+				if groupAllow == 1 {
+					if groupName != "" {
+						msg = fmt.Sprintf("已成功加入群「%s」", groupName)
+					} else {
+						msg = "已成功加入群"
+					}
+				} else {
+					if groupName != "" {
+						msg = fmt.Sprintf("申请已发送，等待群「%s」管理员审核", groupName)
+					} else {
+						msg = "申请已发送，等待管理员审核"
+					}
 				}
 				plugin.HttpSuccess(ctx, map[string]interface{}{
 					"message":    msg,
 					"group_code": req.GroupCode,
 					"group_name": groupName,
+					"allow":      groupAllow,
 				})
 			})
 
