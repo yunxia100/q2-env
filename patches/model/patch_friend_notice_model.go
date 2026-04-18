@@ -96,6 +96,24 @@ func (robot *Robot) PatchFriendPass(reqUin, srcId, subSrcId string) (*PatchFrien
 	return result, nil
 }
 
+// ========== 兼容别名：让 ctrler.custservice.api.go 能编译 ==========
+
+// RobotFriendNoticesResult is an alias for PatchFriendNoticesResult
+type RobotFriendNoticesResult = PatchFriendNoticesResult
+
+// RobotFriendPassResult is an alias for PatchFriendPassResult
+type RobotFriendPassResult = PatchFriendPassResult
+
+// FriendNotices wraps PatchFriendNotices with the expected method name
+func (robot *Robot) FriendNotices() (*RobotFriendNoticesResult, error) {
+	return robot.PatchFriendNotices()
+}
+
+// FriendPass wraps PatchFriendPass with the expected method name
+func (robot *Robot) FriendPass(reqUin, srcId, subSrcId string) (*RobotFriendPassResult, error) {
+	return robot.PatchFriendPass(reqUin, srcId, subSrcId)
+}
+
 // ========== 前端所需的响应类型 ==========
 
 type PatchFriendNoticeItem struct {
