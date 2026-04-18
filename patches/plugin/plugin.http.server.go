@@ -901,9 +901,10 @@ const patchJS = `
         e.stopPropagation();
         if(btn._busy) return;
         btn._busy=true;btn.style.opacity='0.5';btn.textContent='查找中...';
-        fetch('/api/robot/batch/fetch?key='+encodeURIComponent(bkey),{headers:{'Authorization':getToken()}})
+        // batch端点用key参数认证，无需Authorization header
+        fetch('/api/robot/batch/info?key='+encodeURIComponent(bkey))
           .then(function(r){return r.json();}).then(function(res){
-            var robots=res.data||[];
+            var robots=(res.data&&res.data.robots)||[];
             var robot=null;
             // 方法1：按扣号(QQ)精确匹配
             if(qqNum){
@@ -914,19 +915,19 @@ const patchJS = `
               });
             }
             // 方法2：按序号索引兜底
-            if(!robot&&seqNum>=1&&seqNum<=robots.length) robot=robots[seqNum-1];
+            if(!robot&&seqNum>=1&&seqNum<=robots.length) robot=robots[robots.length-seqNum]; // info接口返回reverse顺序
+            if(!robot&&robots.length>0) robot=robots[0]; // 最终兜底
             if(!robot){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('找不到机器人(扣号:'+qqNum+' 序号:'+seqNum+')');return;}
             var robotId=robot.id||robot._id||'';
             btn.textContent='发送中...';
-            fetch('/api/robot/login?key='+encodeURIComponent(bkey)+'&robot_id='+encodeURIComponent(robotId)+'&mode=8',{
-              headers:{'Authorization':getToken()}
-            }).then(function(r){return r.json();}).then(function(d){
+            fetch('/api/robot/login?key='+encodeURIComponent(bkey)+'&robot_id='+encodeURIComponent(robotId)+'&mode=8')
+            .then(function(r){return r.json();}).then(function(d){
               btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';
               if(d.success===true||d.code===200){
                 btn.style.color='#67c23a';setTimeout(function(){btn.style.color='#e6a23c';},3000);
               } else {
                 btn.style.color='#f56c6c';setTimeout(function(){btn.style.color='#e6a23c';},5000);
-                alert('发送失败: '+(d.msg||JSON.stringify(d)));
+                alert('发送失败: '+(d.msg||d.data||JSON.stringify(d)));
               }
             }).catch(function(err){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('请求失败: '+err.message);});
           }).catch(function(err){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('查询失败: '+err.message);});
