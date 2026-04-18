@@ -887,8 +887,8 @@ const patchJS = `
       var cells=row.querySelectorAll('td.n-data-table-td');
       cells.forEach(function(td){if(!opCell&&td.textContent.indexOf('修改密码')!==-1) opCell=td;});
       if(!opCell) return;
-      // NaiveUI DataTable 行的 key 即 robot _id
-      var robotId=row.getAttribute('data-row-key')||'';
+      // NaiveUI DataTable 行的 key（v2用data-n-id，兼容data-row-key）
+      var robotId=row.getAttribute('data-n-id')||row.getAttribute('data-row-key')||'';
       if(!robotId) return;
       var sep=document.createTextNode('\u00a0');
       var btn=document.createElement('span');
