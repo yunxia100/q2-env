@@ -882,14 +882,10 @@ const patchJS = `
     var rows=document.querySelectorAll('tr.n-data-table-tr');
     rows.forEach(function(row){
       if(row.querySelector('.ym-sms-assist')) return;
-      // 找到包含"修改密码"的操作列 td
       var opCell=null;
       var cells=row.querySelectorAll('td.n-data-table-td');
       cells.forEach(function(td){if(!opCell&&td.textContent.indexOf('修改密码')!==-1) opCell=td;});
       if(!opCell) return;
-      // NaiveUI DataTable 行的 key（v2用data-n-id，兼容data-row-key）
-      var robotId=row.getAttribute('data-n-id')||row.getAttribute('data-row-key')||'';
-      if(!robotId) return;
       var sep=document.createTextNode('\u00a0');
       var btn=document.createElement('span');
       btn.className='ym-sms-assist';
@@ -899,23 +895,45 @@ const patchJS = `
       btn.onclick=function(e){
         e.stopPropagation();
         if(btn._busy) return;
-        btn._busy=true;btn.style.opacity='0.5';btn.textContent='发送中...';
-        fetch('/api/robot/login?key='+encodeURIComponent(bkey)+'&robot_id='+encodeURIComponent(robotId)+'&mode=8',{
-          headers:{'Authorization':getToken()}
-        }).then(function(r){return r.json();}).then(function(d){
-          btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';
-          if(d.success===true||d.code===200){
-            btn.style.color='#67c23a';
-            setTimeout(function(){btn.style.color='#e6a23c';},3000);
-          } else {
-            btn.style.color='#f56c6c';
-            setTimeout(function(){btn.style.color='#e6a23c';},5000);
-            alert('发送失败: '+(d.msg||JSON.stringify(d)));
-          }
-        }).catch(function(err){
-          btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';
-          alert('请求失败: '+err.message);
+        btn._busy=true;btn.style.opacity='0.5';btn.textContent='查找中...';
+        // 从行的单元格中提取扣号(QQ号，5-12位数字)
+        var qqNum='';
+        cells.forEach(function(td){
+          var t=td.textContent.trim();
+          if(!qqNum&&/^\d{5,12}$/.test(t)) qqNum=t;
         });
+        // 序号列(第1个td)作为备用行索引
+        var seqNum=cells[0]?parseInt(cells[0].textContent.trim(),10):0;
+        // 获取机器人列表，按扣号或序号定位robot_id
+        fetch('/api/robot/batch/fetch?key='+encodeURIComponent(bkey),{headers:{'Authorization':getToken()}})
+          .then(function(r){return r.json();}).then(function(res){
+            var robots=res.data||[];
+            var robot=null;
+            // 方法1：按扣号(QQ)匹配
+            if(qqNum){
+              robots.forEach(function(r){
+                var uld=r.kernel&&(r.kernel.UserLoginData||r.kernel.user_login_data);
+                var uin=uld?String(uld.Uin||uld.uin||uld.Uis||uld.uis||''):'';
+                if(uin===qqNum) robot=r;
+              });
+            }
+            // 方法2：按序号索引
+            if(!robot&&seqNum>=1&&seqNum<=robots.length) robot=robots[seqNum-1];
+            if(!robot){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('找不到机器人(扣号:'+qqNum+')');return;}
+            var robotId=robot.id||robot._id||'';
+            btn.textContent='发送中...';
+            fetch('/api/robot/login?key='+encodeURIComponent(bkey)+'&robot_id='+encodeURIComponent(robotId)+'&mode=8',{
+              headers:{'Authorization':getToken()}
+            }).then(function(r){return r.json();}).then(function(d){
+              btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';
+              if(d.success===true||d.code===200){
+                btn.style.color='#67c23a';setTimeout(function(){btn.style.color='#e6a23c';},3000);
+              } else {
+                btn.style.color='#f56c6c';setTimeout(function(){btn.style.color='#e6a23c';},5000);
+                alert('发送失败: '+(d.msg||JSON.stringify(d)));
+              }
+            }).catch(function(err){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('请求失败: '+err.message);});
+          }).catch(function(err){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('查询失败: '+err.message);});
       };
       opCell.appendChild(sep);
       opCell.appendChild(btn);
