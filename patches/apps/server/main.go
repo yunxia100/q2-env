@@ -721,13 +721,21 @@ func init() {
 							table_robot.Stop = true
 						}
 
-						// 分配代理
-						if table_proxy := self.Proxys.GetRandom(robot_batch.UserId, nil, "", true); table_proxy != nil {
-							if err := table_robot.SetProxy(table_proxy); err != nil {
-								results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Msg: "设置代理失败: " + err.Error()})
-								continue
+						// 分配代理（安全调用：代理列表为空时 GetRandom 内部会 panic，用 recover 保护）
+						var proxySetErr error
+						func() {
+							defer func() { recover() }()
+							if table_proxy := self.Proxys.GetRandom(robot_batch.UserId, nil, "", true); table_proxy != nil {
+								if err := table_robot.SetProxy(table_proxy); err != nil {
+									proxySetErr = err
+									return
+								}
+								table_robot.ProxyId = table_proxy.Id
 							}
-							table_robot.ProxyId = table_proxy.Id
+						}()
+						if proxySetErr != nil {
+							results = append(results, SubmitResult{Line: line, Uid: uid, Success: false, Msg: "设置代理失败: " + proxySetErr.Error()})
+							continue
 						}
 
 						// 保存到数据库
