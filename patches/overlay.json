@@ -1,6 +1,7 @@
 {
   "Replace": {
     "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/ctrler.custservice.api.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/ctrler.custservice.api.go",
+    "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/ctrler.robot.deal.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/ctrler.robot.deal.go",
     "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/ctrler.robot.deal.message.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/ctrler.robot.deal.message.go",
     "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/ctrler.task.deal.materialgreet.greet.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/ctrler.task.deal.materialgreet.greet.go",
     "/Users/df/Desktop/q2/ymlink-q2-new-master/apps/server/ctrler/ctrler.task.deal.qzoneremark.go": "/Users/df/Desktop/q2/ymlink-q2-env/patches/apps/server/ctrler/ctrler.task.deal.qzoneremark.go",

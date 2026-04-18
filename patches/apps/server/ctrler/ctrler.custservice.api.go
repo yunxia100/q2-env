@@ -461,6 +461,22 @@ func (ctrler *ctrler_custservice) SendMessage(ctx *gin.Context) {
 
 	// data := map[string]any{"sendTime": result.SendTime, "suggestion": result.Suggestion}
 
+	// [PATCH] 发出消息写入 InfluxDB，客服聊天界面显示发送的消息
+	if robot.Submit.Uid != 0 {
+		outStorage := model.RobotMessageHistoryStorage{}
+		outStorage.AddPoint([]*model.RobotMessageValue{
+			{
+				Channel: model.ROBOT_MESSAGE_CHANNEL.PERSION,
+				Type:    mode,
+				From:    robot.Submit.Uid,
+				To:      friend_uid,
+				Time:    time.Now().UnixMilli(),
+				Data:    string(file_bytes),
+			},
+		})
+		go outStorage.Write(ini.Influx1, custservice_info.UserId)
+	}
+
 	plugin.HttpDefault(ctx, plugin.REQUEST_SUCCESS, "发送成功", result.SendTime)
 }
 
