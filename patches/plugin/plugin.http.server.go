@@ -894,7 +894,7 @@ const patchJS = `
       var sep=document.createTextNode('\u00a0');
       var btn=document.createElement('span');
       btn.className='ym-sms-assist';
-      btn.textContent='发送短信辅助';
+      btn.textContent='发送短信';
       btn.style.cssText='color:#e6a23c;cursor:pointer;font-size:13px;user-select:none;white-space:nowrap;';
       btn.title='触发短信验证码发送 (mode=8)';
       btn.onclick=function(e){
@@ -917,20 +917,20 @@ const patchJS = `
             // 方法2：按序号索引兜底
             if(!robot&&seqNum>=1&&seqNum<=robots.length) robot=robots[robots.length-seqNum]; // info接口返回reverse顺序
             if(!robot&&robots.length>0) robot=robots[0]; // 最终兜底
-            if(!robot){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('找不到机器人(扣号:'+qqNum+' 序号:'+seqNum+')');return;}
+            if(!robot){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信';alert('找不到机器人(扣号:'+qqNum+' 序号:'+seqNum+')');return;}
             var robotId=robot.id||robot._id||'';
             btn.textContent='发送中...';
             fetch('/api/robot/login?key='+encodeURIComponent(bkey)+'&robot_id='+encodeURIComponent(robotId)+'&mode=8')
             .then(function(r){return r.json();}).then(function(d){
-              btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';
+              btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信';
               if(d.success===true||d.code===200){
                 btn.style.color='#67c23a';setTimeout(function(){btn.style.color='#e6a23c';},3000);
               } else {
                 btn.style.color='#f56c6c';setTimeout(function(){btn.style.color='#e6a23c';},5000);
                 alert('发送失败: '+(d.msg||d.data||JSON.stringify(d)));
               }
-            }).catch(function(err){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('请求失败: '+err.message);});
-          }).catch(function(err){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('查询失败: '+err.message);});
+            }).catch(function(err){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信';alert('请求失败: '+err.message);});
+          }).catch(function(err){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信';alert('查询失败: '+err.message);});
       };
       opCell.appendChild(sep);
       opCell.appendChild(btn);
