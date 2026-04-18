@@ -337,14 +337,13 @@ func init() {
 					}
 				}
 
-				// 驱动要求 joinGroupAuth 不能为空才能真正执行入群
-				// 若搜索未拿到 authKey，直接报错，避免驱动静默失败（返回 result=0 但实际未加入）
-				if joinGroupAuth == "" {
-					errMsg := "无法获取群入群凭证(authKey)，请确认群号正确或稍后重试"
+				// 若搜索完全失败或找不到群，则报错
+				// 注意：allow=1（免验证群）可能 joinGroupAuth 为空，驱动仍可直接加入，不拦截
+				// 仅当 allow=0（需审核群）且 joinGroupAuth 为空时才拦截（驱动需要 authKey 才能发验证语）
+				if !groupFound {
+					errMsg := fmt.Sprintf("未找到群 %s，请确认群号正确", req.GroupCode)
 					if searchErr != nil {
 						errMsg = "搜索群信息失败: " + searchErr.Error()
-					} else if !groupFound {
-						errMsg = fmt.Sprintf("未找到群 %s，请确认群号正确", req.GroupCode)
 					}
 					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, errMsg, nil)
 					return
@@ -353,11 +352,15 @@ func init() {
 				// 根据是否有验证语选择入群方式
 				var enterResult model.RobotEnterGroupResult
 				if req.Hello != "" {
-					// 有验证语：带验证语申请入群
+					// 有验证语：需要 joinGroupAuth 构造入群链接
+					if joinGroupAuth == "" {
+						plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "无法获取群入群凭证，无法发送验证语", nil)
+						return
+					}
 					authUrl := "https://qm.qq.com/join?authKey=" + joinGroupAuth
 					enterResult, err = robot.EnterGroupSendHello(groupUid, authUrl, req.Hello, nil)
 				} else {
-					// 无验证语：直接以 search 方式申请入群
+					// 无验证语：直接以 search 方式申请入群（免验证群 joinGroupAuth 可为空）
 					enterResult, err = robot.EnterGroup(groupUid, "search", "", joinGroupAuth, nil)
 				}
 				if err != nil {
