@@ -304,11 +304,6 @@ func init() {
 					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "机器人不存在", nil)
 					return
 				}
-				if robot.Online != 1 {
-					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "机器人当前离线，请先让机器人上线后再申请入群", nil)
-					return
-				}
-
 				groupUid, _ := strconv.Atoi(req.GroupCode)
 				if groupUid == 0 {
 					plugin.HttpDefault(ctx, plugin.REQUEST_BAD, "群号格式错误，请输入纯数字", nil)
