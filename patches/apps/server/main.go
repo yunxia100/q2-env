@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -408,10 +409,34 @@ func init() {
 				// 根据群的 Allow 字段给出准确提示
 				var msg string
 				if groupAllow == 1 {
-					if groupName != "" {
-						msg = fmt.Sprintf("入群申请已提交「%s」，免验证群稍后将自动加入", groupName)
+					// 免验证群：等待 3 秒后检查群列表，确认是否真正入群
+					time.Sleep(3 * time.Second)
+					confirmed := false
+					groupListResult, listErr := robot.GetGroupList()
+					if listErr == nil {
+						listBytes, _ := json.Marshal(groupListResult)
+						listStr := string(listBytes)
+						confirmed = strings.Contains(listStr, req.GroupCode)
+					}
+					logrus.WithFields(logrus.Fields{
+						"group_code": req.GroupCode,
+						"confirmed":  confirmed,
+						"list_err":   fmt.Sprintf("%v", listErr),
+					}).Info("[PATCH-JOIN-VERIFY] group list check after join")
+
+					if confirmed {
+						if groupName != "" {
+							msg = fmt.Sprintf("机器人已成功加入群「%s」", groupName)
+						} else {
+							msg = fmt.Sprintf("机器人已成功加入群 %s", req.GroupCode)
+						}
 					} else {
-						msg = "入群申请已提交，免验证群稍后将自动加入"
+						// 驱动返回成功但群列表未更新，可能需要更长时间
+						if groupName != "" {
+							msg = fmt.Sprintf("入群请求已发送至「%s」（免验证），若3分钟内群列表未更新请重试", groupName)
+						} else {
+							msg = "入群请求已发送（免验证），若3分钟内群列表未更新请重试"
+						}
 					}
 				} else {
 					if groupName != "" {
