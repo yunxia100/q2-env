@@ -874,8 +874,56 @@ const patchJS = `
     w.appendChild(b); filterRow.appendChild(w);
   }
 
+  // =========== robot-batch 行：发送短信辅助 (mode=8) ===========
+  function injectSmsAssistBtns(){
+    if(!isRobotBatchPage()) return;
+    var bkey=getRobotBatchKey();
+    if(!bkey) return;
+    var rows=document.querySelectorAll('tr.n-data-table-tr');
+    rows.forEach(function(row){
+      if(row.querySelector('.ym-sms-assist')) return;
+      // 找到包含"修改密码"的操作列 td
+      var opCell=null;
+      var cells=row.querySelectorAll('td.n-data-table-td');
+      cells.forEach(function(td){if(!opCell&&td.textContent.indexOf('修改密码')!==-1) opCell=td;});
+      if(!opCell) return;
+      // NaiveUI DataTable 行的 key 即 robot _id
+      var robotId=row.getAttribute('data-row-key')||'';
+      if(!robotId) return;
+      var sep=document.createTextNode('\u00a0');
+      var btn=document.createElement('span');
+      btn.className='ym-sms-assist';
+      btn.textContent='发送短信辅助';
+      btn.style.cssText='color:#e6a23c;cursor:pointer;font-size:13px;user-select:none;white-space:nowrap;';
+      btn.title='触发短信验证码发送 (mode=8)';
+      btn.onclick=function(e){
+        e.stopPropagation();
+        if(btn._busy) return;
+        btn._busy=true;btn.style.opacity='0.5';btn.textContent='发送中...';
+        fetch('/api/robot/login?key='+encodeURIComponent(bkey)+'&robot_id='+encodeURIComponent(robotId)+'&mode=8',{
+          headers:{'Authorization':getToken()}
+        }).then(function(r){return r.json();}).then(function(d){
+          btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';
+          if(d.success===true||d.code===200){
+            btn.style.color='#67c23a';
+            setTimeout(function(){btn.style.color='#e6a23c';},3000);
+          } else {
+            btn.style.color='#f56c6c';
+            setTimeout(function(){btn.style.color='#e6a23c';},5000);
+            alert('发送失败: '+(d.msg||JSON.stringify(d)));
+          }
+        }).catch(function(err){
+          btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';
+          alert('请求失败: '+err.message);
+        });
+      };
+      opCell.appendChild(sep);
+      opCell.appendChild(btn);
+    });
+  }
+
   // =========== MutationObserver 统一监听 ===========
-  new MutationObserver(function(){ ensureJoinBtn(); ensureMemberBtn(); ensureBatchAccountBtn(); ensureGroupMsgBtn(); ensureInviteBtn(); }).observe(document.body,{childList:true,subtree:true});
-  setTimeout(function(){ ensureJoinBtn(); ensureMemberBtn(); ensureBatchAccountBtn(); ensureGroupMsgBtn(); ensureInviteBtn(); }, 500);
+  new MutationObserver(function(){ ensureJoinBtn(); ensureMemberBtn(); ensureBatchAccountBtn(); ensureGroupMsgBtn(); ensureInviteBtn(); injectSmsAssistBtns(); }).observe(document.body,{childList:true,subtree:true});
+  setTimeout(function(){ ensureJoinBtn(); ensureMemberBtn(); ensureBatchAccountBtn(); ensureGroupMsgBtn(); ensureInviteBtn(); injectSmsAssistBtns(); }, 500);
 })();
 `
