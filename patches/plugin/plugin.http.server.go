@@ -879,13 +879,18 @@ const patchJS = `
     if(!isRobotBatchPage()) return;
     var bkey=getRobotBatchKey();
     if(!bkey) return;
-    var rows=document.querySelectorAll('tr.data-table-tr');
+    // 实际DOM：<tr data-v-xxx> 无class；操作列 <td class="ctrl">；扣号列 <td class="uid">；序号列 <td class="index">
+    var rows=document.querySelectorAll('tr');
     rows.forEach(function(row){
       if(row.querySelector('.ym-sms-assist')) return;
-      var opCell=null;
-      var cells=row.querySelectorAll('td.data-table-td');
-      cells.forEach(function(td){if(!opCell&&td.textContent.indexOf('修改密码')!==-1) opCell=td;});
-      if(!opCell) return;
+      var opCell=row.querySelector('td.ctrl');
+      if(!opCell) return; // 非数据行（无操作列）跳过
+      // 从专用列读取扣号和序号
+      var uidCell=row.querySelector('td.uid');
+      var idxCell=row.querySelector('td.index');
+      var qqNum=uidCell?uidCell.textContent.trim():'';
+      var seqNum=idxCell?parseInt(idxCell.textContent.trim(),10):0;
+      // 注入按钮
       var sep=document.createTextNode('\u00a0');
       var btn=document.createElement('span');
       btn.className='ym-sms-assist';
@@ -896,20 +901,11 @@ const patchJS = `
         e.stopPropagation();
         if(btn._busy) return;
         btn._busy=true;btn.style.opacity='0.5';btn.textContent='查找中...';
-        // 从行的单元格中提取扣号(QQ号，5-12位数字)
-        var qqNum='';
-        cells.forEach(function(td){
-          var t=td.textContent.trim();
-          if(!qqNum&&/^\d{5,12}$/.test(t)) qqNum=t;
-        });
-        // 序号列(第1个td)作为备用行索引
-        var seqNum=cells[0]?parseInt(cells[0].textContent.trim(),10):0;
-        // 获取机器人列表，按扣号或序号定位robot_id
         fetch('/api/robot/batch/fetch?key='+encodeURIComponent(bkey),{headers:{'Authorization':getToken()}})
           .then(function(r){return r.json();}).then(function(res){
             var robots=res.data||[];
             var robot=null;
-            // 方法1：按扣号(QQ)匹配
+            // 方法1：按扣号(QQ)精确匹配
             if(qqNum){
               robots.forEach(function(r){
                 var uld=r.kernel&&(r.kernel.UserLoginData||r.kernel.user_login_data);
@@ -917,9 +913,9 @@ const patchJS = `
                 if(uin===qqNum) robot=r;
               });
             }
-            // 方法2：按序号索引
+            // 方法2：按序号索引兜底
             if(!robot&&seqNum>=1&&seqNum<=robots.length) robot=robots[seqNum-1];
-            if(!robot){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('找不到机器人(扣号:'+qqNum+')');return;}
+            if(!robot){btn._busy=false;btn.style.opacity='1';btn.textContent='发送短信辅助';alert('找不到机器人(扣号:'+qqNum+' 序号:'+seqNum+')');return;}
             var robotId=robot.id||robot._id||'';
             btn.textContent='发送中...';
             fetch('/api/robot/login?key='+encodeURIComponent(bkey)+'&robot_id='+encodeURIComponent(robotId)+'&mode=8',{
