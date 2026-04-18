@@ -879,11 +879,11 @@ const patchJS = `
     if(!isRobotBatchPage()) return;
     var bkey=getRobotBatchKey();
     if(!bkey) return;
-    var rows=document.querySelectorAll('tr.n-data-table-tr');
+    var rows=document.querySelectorAll('tr.data-table-tr');
     rows.forEach(function(row){
       if(row.querySelector('.ym-sms-assist')) return;
       var opCell=null;
-      var cells=row.querySelectorAll('td.n-data-table-td');
+      var cells=row.querySelectorAll('td.data-table-td');
       cells.forEach(function(td){if(!opCell&&td.textContent.indexOf('修改密码')!==-1) opCell=td;});
       if(!opCell) return;
       var sep=document.createTextNode('\u00a0');
