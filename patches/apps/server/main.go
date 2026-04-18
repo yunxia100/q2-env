@@ -319,6 +319,10 @@ func init() {
 				if searchErr == nil && searchResult.ResultCode == 0 && searchResult.ItemGroups != nil {
 					groupCodeStr := strconv.Itoa(groupUid)
 					for _, groups := range *searchResult.ItemGroups {
+						// 只取"查找群"结果集，该结果集才含有 JoinGroupAuth
+						if groups.GroupName != "查找群" {
+							continue
+						}
 						for _, item := range groups.ResultItems {
 							itemId := strings.TrimSpace(item.ResultId)
 							if itemId == groupCodeStr || itemId == req.GroupCode {
